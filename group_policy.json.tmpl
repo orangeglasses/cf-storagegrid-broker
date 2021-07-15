@@ -1,0 +1,27 @@
+{
+  "s3": {
+    "Statement": [
+      {
+        "Sid": "DefaultBindAccessBuckets-{{.BucketName}}",
+        "Effect": "Allow",
+        "Action": [
+          "s3:ListAllMyBuckets",
+          "s3:ListBucket"
+        ],
+        "Resource": [
+          "urn:sgws:s3:::{{.BucketName}}"
+        ]
+      },
+      {
+        "Sid": "DefaultBindAccessObjects-{{.BucketName}}",
+        "Effect": "Allow",
+        "Action": [
+          "s3:*Object*"
+        ],
+        "Resource": [
+          "urn:sgws:s3:::{{.BucketName}}/*"
+        ]
+      }
+    ]
+  }
+}
