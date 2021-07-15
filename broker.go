@@ -45,7 +45,6 @@ func (b *broker) Provision(context context.Context, instanceID string, details d
 	}*/
 
 	bucketName := strings.ReplaceAll(instanceID, "-", "")
-	fmt.Println(bucketName)
 	region := b.s3client.Region
 
 	policy, err := GenerateS3Policy(bucketName)
@@ -91,7 +90,7 @@ func (b *broker) Deprovision(context context.Context, instanceID string, details
 	//1. Delete group
 	grp, err := b.sgClient.GetGroupByName(bucketName)
 	if err != nil {
-		return domain.DeprovisionServiceSpec{}, err
+		return domain.DeprovisionServiceSpec{}, nil
 	}
 
 	if err := b.sgClient.DeleteGroup(grp.ID); err != nil {
