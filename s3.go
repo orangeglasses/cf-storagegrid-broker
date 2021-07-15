@@ -58,7 +58,10 @@ func (c *s3client) login() error {
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: c.SkipSSL},
 	}
 
-	httpClient := http.Client{Transport: tr}
+	httpClient := http.Client{
+		Transport: tr,
+		Timeout:   5 * time.Second,
+	}
 
 	sess, err := session.NewSession(&aws.Config{
 		HTTPClient:       &httpClient,
