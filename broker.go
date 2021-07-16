@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pivotal-cf/brokerapi"
 	"github.com/pivotal-cf/brokerapi/domain"
 	"github.com/pivotal-cf/brokerapi/domain/apiresponses"
@@ -104,6 +106,12 @@ func (b *broker) Deprovision(context context.Context, instanceID string, details
 
 	//2. Delete bucket
 	if _, err := b.s3client.DeleteBucket(bucketName); err != nil {
+		if awsErr, ok := err.(awserr.Error); ok {
+			if awsErr.Code() == s3.ErrCodeNoSuchBucket {
+				return domain.DeprovisionServiceSpec{}, nil
+			}
+		}
+
 		return domain.DeprovisionServiceSpec{}, err
 	}
 
