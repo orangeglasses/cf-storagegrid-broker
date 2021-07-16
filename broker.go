@@ -128,7 +128,7 @@ func (b *broker) Bind(context context.Context, instanceID, bindingID string, det
 	binding := domain.Binding{
 		Credentials: Credentials{
 			URI:                fmt.Sprintf("s3://%s:%s@%s/%s", url.QueryEscape(creds.AccessKey), url.QueryEscape(creds.SecretAccessKey), b.s3client.Endpoint, instanceID),
-			InsecureSkipVerify: false,
+			InsecureSkipVerify: b.env.StorageGridSkipSSLCheck,
 			AccessKeyID:        creds.AccessKey,
 			SecretAccessKey:    creds.SecretAccessKey,
 			Region:             b.s3client.Region,
