@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/pivotal-cf/brokerapi"
 	"github.com/pivotal-cf/brokerapi/domain"
+	"github.com/pivotal-cf/brokerapi/domain/apiresponses"
 )
 
 type broker struct {
@@ -53,17 +55,19 @@ func (b *broker) Provision(context context.Context, instanceID string, details d
 	}
 
 	//1. Create a group with appropriate policy first
+	log.Printf("Creating group with name: %s", bucketName)
 	grp, err := b.sgClient.CreateGroup(bucketName, policy)
 	if err != nil {
 		if ae, ok := err.(apiError); ok {
 			if ae.statusCode == http.StatusConflict {
-				return domain.ProvisionedServiceSpec{}, fmt.Errorf("Service instance already exists")
+				return domain.ProvisionedServiceSpec{}, apiresponses.ErrInstanceAlreadyExists
 			}
 		}
 		return domain.ProvisionedServiceSpec{}, fmt.Errorf("Group Creation Failed: %s", err)
 	}
 
 	//2. Create a bucket
+	log.Printf("Creating bucket with name: %s", bucketName)
 	_, err = b.s3client.CreateBucket(bucketName, region)
 	if err != nil {
 		b.sgClient.DeleteGroup(grp.ID)
@@ -86,6 +90,7 @@ func (b *broker) GetInstance(ctx context.Context, instanceID string) (domain.Get
 
 func (b *broker) Deprovision(context context.Context, instanceID string, details brokerapi.DeprovisionDetails, asyncAllowed bool) (domain.DeprovisionServiceSpec, error) {
 	bucketName := strings.ReplaceAll(instanceID, "-", "")
+	log.Printf("Deleting instance with name: %s", bucketName)
 
 	//1. Delete group
 	grp, err := b.sgClient.GetGroupByName(bucketName)
@@ -108,6 +113,8 @@ func (b *broker) Deprovision(context context.Context, instanceID string, details
 func (b *broker) Bind(context context.Context, instanceID, bindingID string, details domain.BindDetails, asyncAllowed bool) (domain.Binding, error) {
 	bucketName := strings.ReplaceAll(instanceID, "-", "")
 	userName := strings.ReplaceAll(bindingID, "-", "")
+
+	log.Printf("Creating binding %s for bucket %s", userName, bucketName)
 
 	//1a retrieve groupd id
 	group, err := b.sgClient.GetGroupByName(bucketName)
@@ -146,6 +153,8 @@ func (b *broker) GetBinding(ctx context.Context, instanceID, bindingID string) (
 
 func (b *broker) Unbind(context context.Context, instanceID, bindingID string, details domain.UnbindDetails, asyncAllowed bool) (domain.UnbindSpec, error) {
 	userName := strings.ReplaceAll(bindingID, "-", "")
+
+	log.Printf("Deleting binding %s", userName)
 
 	//1. delete user
 	user, err := b.sgClient.GetUserByName(userName)
