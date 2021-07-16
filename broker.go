@@ -131,7 +131,12 @@ func (b *broker) Bind(context context.Context, instanceID, bindingID string, det
 	}
 
 	//1b Create storage grid user
-	user, err := b.sgClient.CreateUser(userName, fmt.Sprintf("Binding to app GUID: %s", details.AppGUID), []string{group.ID})
+	userFullName := fmt.Sprintf("Binding to app GUID: %s", details.AppGUID)
+	if details.AppGUID == "" {
+		userFullName = fmt.Sprintf("Service Key in space GUID: %s", details.BindResource.SpaceGuid)
+	}
+
+	user, err := b.sgClient.CreateUser(userName, userFullName, []string{group.ID})
 	if err != nil {
 		return domain.Binding{}, nil
 	}
