@@ -153,7 +153,7 @@ func (b *broker) Bind(context context.Context, instanceID, bindingID string, det
 			AccessKeyID:        creds.AccessKey,
 			SecretAccessKey:    creds.SecretAccessKey,
 			Region:             b.s3client.Region,
-			Bucket:             instanceID,
+			Bucket:             bucketName,
 			Endpoint:           b.s3client.Endpoint,
 			PathStyleAccess:    b.env.S3ForcePathStyle,
 		},
