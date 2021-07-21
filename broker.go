@@ -30,6 +30,7 @@ type Credentials struct {
 	Region             string `json:"region"`
 	Bucket             string `json:"bucket"`
 	Endpoint           string `json:"endpoint"`
+	PathStyleAccess    bool   `json:"pathStyleAccess"`
 }
 
 type ProvisionParameters struct {
@@ -154,6 +155,7 @@ func (b *broker) Bind(context context.Context, instanceID, bindingID string, det
 			Region:             b.s3client.Region,
 			Bucket:             instanceID,
 			Endpoint:           b.s3client.Endpoint,
+			PathStyleAccess:    b.env.S3ForcePathStyle,
 		},
 	}
 
