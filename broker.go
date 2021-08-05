@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/google/uuid"
 	"github.com/pivotal-cf/brokerapi"
 	"github.com/pivotal-cf/brokerapi/domain"
 	"github.com/pivotal-cf/brokerapi/domain/apiresponses"
@@ -22,19 +24,32 @@ type broker struct {
 	s3client *s3client
 }
 
-type Credentials struct {
-	URI                string `json:"uri"`
-	InsecureSkipVerify bool   `json:"insecure_skip_verify"`
-	AccessKeyID        string `json:"access_key_id"`
-	SecretAccessKey    string `json:"secret_access_key"`
-	Region             string `json:"region"`
-	Bucket             string `json:"bucket"`
-	Endpoint           string `json:"endpoint"`
-	PathStyleAccess    bool   `json:"pathStyleAccess"`
+type CredBucket struct {
+	URI    string `json:"uri"`
+	Name   string `json:"name"`
+	Bucket string `json:"bucket"`
+	Region string `json:"region"`
 }
 
-type ProvisionParameters struct {
+type Credentials struct {
+	InsecureSkipVerify bool         `json:"insecure_skip_verify"`
+	AccessKeyID        string       `json:"access_key_id"`
+	SecretAccessKey    string       `json:"secret_access_key"`
+	Buckets            []CredBucket `json:"bucket"`
+	Endpoint           string       `json:"endpoint"`
+	PathStyleAccess    bool         `json:"pathStyleAccess"`
+}
+
+type ProvisionParamsBucket struct {
+	Name   string //max 9 chars
 	Region string `json:"region"`
+}
+
+type ProvisionParameters []ProvisionParamsBucket
+
+type Bucket struct {
+	name   string
+	region string
 }
 
 func (b *broker) Services(context context.Context) ([]brokerapi.Service, error) {
@@ -42,24 +57,48 @@ func (b *broker) Services(context context.Context) ([]brokerapi.Service, error) 
 }
 
 func (b *broker) Provision(context context.Context, instanceID string, details domain.ProvisionDetails, asyncAllowed bool) (domain.ProvisionedServiceSpec, error) {
-	//we won't support setting region from parameter for now.
-	/*var params ProvisionParameters
-	err := json.Unmarshal(details.RawParameters, &params)
-	if err != nil {
-		return domain.ProvisionedServiceSpec{}, err
-	}*/
+	var createBuckets []Bucket
 
-	bucketName := strings.ReplaceAll(instanceID, "-", "")
-	region := b.s3client.Region
+	groupName := strings.ReplaceAll(instanceID, "-", "")
 
-	policy, err := GenerateS3Policy(bucketName)
+	if details.RawParameters != nil && len(details.RawParameters) > 0 {
+		var params ProvisionParameters
+		err := json.Unmarshal(details.RawParameters, &params)
+		if err != nil {
+			return domain.ProvisionedServiceSpec{}, apiresponses.ErrRawParamsInvalid
+		}
+
+		for _, reqBucket := range params {
+			var friendlyPart string
+			if len(reqBucket.Name) > 27 {
+				friendlyPart = reqBucket.Name[0:27]
+			} else {
+				friendlyPart = reqBucket.Name
+			}
+
+			bucket := Bucket{
+				name:   fmt.Sprintf("%s-%s", friendlyPart, strings.ReplaceAll(uuid.New().String(), "-", "")),
+				region: reqBucket.Region,
+			}
+			createBuckets = append(createBuckets, bucket)
+		}
+
+	} else {
+		bucket := Bucket{
+			name:   strings.ReplaceAll(uuid.New().String(), "-", ""),
+			region: b.s3client.Region,
+		}
+		createBuckets = append(createBuckets, bucket)
+	}
+
+	policy, err := GenerateS3Policy(groupName, createBuckets)
 	if err != nil {
 		return domain.ProvisionedServiceSpec{}, fmt.Errorf("Generating policy failed: %s", err)
 	}
 
 	//1. Create a group with appropriate policy first
-	log.Printf("Creating group with name: %s", bucketName)
-	grp, err := b.sgClient.CreateGroup(bucketName, policy)
+	log.Printf("Creating group with name: %s", groupName)
+	grp, err := b.sgClient.CreateGroup(groupName, policy)
 	if err != nil {
 		if ae, ok := err.(apiError); ok {
 			if ae.statusCode == http.StatusConflict {
@@ -69,12 +108,14 @@ func (b *broker) Provision(context context.Context, instanceID string, details d
 		return domain.ProvisionedServiceSpec{}, fmt.Errorf("Group Creation Failed: %s", err)
 	}
 
-	//2. Create a bucket
-	log.Printf("Creating bucket with name: %s", bucketName)
-	_, err = b.s3client.CreateBucket(bucketName, region)
-	if err != nil {
-		b.sgClient.DeleteGroup(grp.ID)
-		return domain.ProvisionedServiceSpec{}, fmt.Errorf("Creating bucket failed with error: %s", err)
+	//2. Create a buckets
+	for _, bucket := range createBuckets {
+		log.Printf("Creating bucket with name: %s", bucket.name)
+		_, err = b.s3client.CreateBucket(bucket.name, bucket.region)
+		if err != nil {
+			b.sgClient.DeleteGroup(grp.ID)
+			return domain.ProvisionedServiceSpec{}, fmt.Errorf("Creating bucket failed with error: %s", err)
+		}
 	}
 
 	spec := domain.ProvisionedServiceSpec{
@@ -92,27 +133,36 @@ func (b *broker) GetInstance(ctx context.Context, instanceID string) (domain.Get
 }
 
 func (b *broker) Deprovision(context context.Context, instanceID string, details brokerapi.DeprovisionDetails, asyncAllowed bool) (domain.DeprovisionServiceSpec, error) {
-	bucketName := strings.ReplaceAll(instanceID, "-", "")
-	log.Printf("Deleting instance with name: %s", bucketName)
+	instance := strings.ReplaceAll(instanceID, "-", "")
+	log.Printf("Deleting instance with name: %s", instance)
 
-	//1. Delete group
-	grp, err := b.sgClient.GetGroupByName(bucketName)
+	//1. Get Group
+	grp, err := b.sgClient.GetGroupByName(instance)
 	if err != nil {
 		return domain.DeprovisionServiceSpec{}, nil
 	}
 
-	if err := b.sgClient.DeleteGroup(grp.ID); err != nil {
-		return domain.DeprovisionServiceSpec{}, err
+	//2. get buckets names from group olicy
+	bucketNames, err := getBucketsFromGroup(grp)
+	fmt.Println(bucketNames)
+	if err != nil {
+		return domain.DeprovisionServiceSpec{}, fmt.Errorf("Error getting buckets for group %s: %s", grp.DisplayName, err)
 	}
 
-	//2. Delete bucket
-	if _, err := b.s3client.DeleteBucket(bucketName); err != nil {
-		if awsErr, ok := err.(awserr.Error); ok {
-			if awsErr.Code() == s3.ErrCodeNoSuchBucket {
-				return domain.DeprovisionServiceSpec{}, nil
+	//3. Delete buckets
+	for _, bucketName := range bucketNames {
+		log.Printf("Deleting bucket %s\n", bucketName)
+		if _, err := b.s3client.DeleteBucket(bucketName); err != nil {
+			if awsErr, ok := err.(awserr.Error); ok {
+				if awsErr.Code() != s3.ErrCodeNoSuchBucket {
+					return domain.DeprovisionServiceSpec{}, err
+				}
 			}
 		}
+	}
 
+	//4. Delete group
+	if err := b.sgClient.DeleteGroup(grp.ID); err != nil {
 		return domain.DeprovisionServiceSpec{}, err
 	}
 
@@ -120,18 +170,25 @@ func (b *broker) Deprovision(context context.Context, instanceID string, details
 }
 
 func (b *broker) Bind(context context.Context, instanceID, bindingID string, details domain.BindDetails, asyncAllowed bool) (domain.Binding, error) {
-	bucketName := strings.ReplaceAll(instanceID, "-", "")
+	instance := strings.ReplaceAll(instanceID, "-", "")
 	userName := strings.ReplaceAll(bindingID, "-", "")
 
-	log.Printf("Creating binding %s for bucket %s", userName, bucketName)
+	log.Printf("Creating binding %s for instance %s", userName, instance)
 
-	//1a retrieve groupd id
-	group, err := b.sgClient.GetGroupByName(bucketName)
+	//1a retrieve group
+	group, err := b.sgClient.GetGroupByName(instance)
 	if err != nil {
-		return domain.Binding{}, fmt.Errorf("Error retrieving groupID: %s", err)
+		return domain.Binding{}, fmt.Errorf("Error retrieving group: %s", err)
 	}
 
-	//1b Create storage grid user
+	//2 retrieve bucket names and create buckets array
+	bucketNames, err := getBucketsFromGroup(group)
+	if err != nil {
+		return domain.Binding{}, fmt.Errorf("Unable to retrieve buckets for instance %s", instance)
+	}
+	fmt.Println(bucketNames)
+
+	//3 Create storage grid user in group
 	userFullName := fmt.Sprintf("Binding to app GUID: %s", details.AppGUID)
 	if details.AppGUID == "" {
 		userFullName = fmt.Sprintf("Service Key in space GUID: %s", details.BindResource.SpaceGuid)
@@ -139,21 +196,44 @@ func (b *broker) Bind(context context.Context, instanceID, bindingID string, det
 
 	user, err := b.sgClient.CreateUser(userName, userFullName, []string{group.ID})
 	if err != nil {
-		return domain.Binding{}, nil
+		if ae, ok := err.(apiError); ok {
+			if ae.statusCode != 409 {
+				return domain.Binding{}, err
+			} else {
+				user, _ = b.sgClient.GetUserByName(userName)
+			}
+		} else {
+			return domain.Binding{}, err
+		}
 	}
 
-	//2. generate permanent creds for user
+	//4 generate permanent creds for user
 	creds, err := b.sgClient.CreateS3CredsForUser(user.ID)
 
-	//3. return bind info
+	//5. return bind info
+	var buckets []CredBucket
+	for _, name := range bucketNames {
+		r, err := b.s3client.GetBucketRegion(name)
+		if err != nil {
+			return domain.Binding{}, fmt.Errorf("Unable to determine region for bucket %s", name)
+		}
+
+		friendlyName := name[0 : len(name)-33]
+		b := CredBucket{
+			URI:    fmt.Sprintf("s3://%s:%s@%s/%s", url.QueryEscape(creds.AccessKey), url.QueryEscape(creds.SecretAccessKey), b.s3client.Endpoint, name),
+			Name:   friendlyName,
+			Bucket: name,
+			Region: r,
+		}
+		buckets = append(buckets, b)
+	}
+
 	binding := domain.Binding{
 		Credentials: Credentials{
-			URI:                fmt.Sprintf("s3://%s:%s@%s/%s", url.QueryEscape(creds.AccessKey), url.QueryEscape(creds.SecretAccessKey), b.s3client.Endpoint, instanceID),
 			InsecureSkipVerify: b.env.StorageGridSkipSSLCheck,
 			AccessKeyID:        creds.AccessKey,
 			SecretAccessKey:    creds.SecretAccessKey,
-			Region:             b.s3client.Region,
-			Bucket:             bucketName,
+			Buckets:            buckets,
 			Endpoint:           b.s3client.Endpoint,
 			PathStyleAccess:    b.env.S3ForcePathStyle,
 		},

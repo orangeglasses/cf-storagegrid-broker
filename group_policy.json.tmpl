@@ -2,25 +2,21 @@
   "s3": {
     "Statement": [
       {
-        "Sid": "DefaultBindAccessBuckets-{{.BucketName}}",
+        "Sid": "DefaultBindAccessBuckets-{{.InstanceID}}",
         "Effect": "Allow",
         "Action": [
           "s3:ListAllMyBuckets",
           "s3:ListBucket"
         ],
-        "Resource": [
-          "urn:sgws:s3:::{{.BucketName}}"
-        ]
+        "Resource": {{.BucketResources}}
       },
       {
-        "Sid": "DefaultBindAccessObjects-{{.BucketName}}",
+        "Sid": "DefaultBindAccessObjects-{{.InstanceID}}",
         "Effect": "Allow",
         "Action": [
           "s3:*Object*"
         ],
-        "Resource": [
-          "urn:sgws:s3:::{{.BucketName}}/*"
-        ]
+        "Resource": {{.ObjectResources}}        
       }
     ]
   }

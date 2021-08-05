@@ -122,43 +122,20 @@ func (c *s3client) DeleteBucket(bucketName string) (*s3.DeleteBucketOutput, erro
 	return dbOutput, nil
 }
 
-/*func (c *s3client) GetBucketPolicy(bucketName string) (*s3.GetBucketPolicyOutput, error) {
+func (c *s3client) GetBucketRegion(bucketName string) (string, error) {
 	err := c.login()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	input := &s3.GetBucketPolicyInput{
-		Bucket: aws.String(bucketName),
-	}
-
-	result, err := c.Client.GetBucketPolicy(input)
+	res, err := c.Client.GetBucketLocation(&s3.GetBucketLocationInput{Bucket: aws.String(bucketName)})
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	//fmt.Println(result.String())
+	if *res == (s3.GetBucketLocationOutput{}) {
+		return "us-east-1", nil
+	}
 
-	return result, nil
+	return *res.LocationConstraint, nil
 }
-
-func (c *s3client) PutBucketPolicy(bucketName, policy string) (*s3.PutBucketPolicyOutput, error) {
-	err := c.login()
-	if err != nil {
-		return nil, err
-	}
-
-	input := &s3.PutBucketPolicyInput{
-		Bucket: aws.String(bucketName),
-		Policy: aws.String(policy),
-	}
-
-	result, err := c.Client.PutBucketPolicy(input)
-	if err != nil {
-		return nil, err
-	}
-
-	fmt.Println(result.String())
-
-	return result, nil
-}*/
