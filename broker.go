@@ -124,7 +124,7 @@ func (b *broker) Provision(context context.Context, instanceID string, details d
 			}
 			return domain.ProvisionedServiceSpec{}, fmt.Errorf("Creating bucket failed with error: %s", err)
 		}
-		createdBuckets = append(createdBuckets, bucket)
+		createdBuckets = append(createdBuckets, bucket.name)
 	}
 
 	spec := domain.ProvisionedServiceSpec{
