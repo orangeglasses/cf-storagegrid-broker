@@ -144,7 +144,7 @@ func (b *broker) Deprovision(context context.Context, instanceID string, details
 	grp, err := b.sgClient.GetGroupByName(instance)
 	if err != nil {
 		if sge, ok := err.(apiError); ok {
-			if sge.statusCode != 502 {
+			if sge.statusCode != 404 {
 				return domain.DeprovisionServiceSpec{}, fmt.Errorf("Error getting group from storageGrid: %s", err)
 			}
 		} else {
