@@ -112,14 +112,19 @@ func (b *broker) Provision(context context.Context, instanceID string, details d
 	}
 
 	//2. Create buckets
+	var createdBuckets []string
 	for _, bucket := range createBuckets {
 		log.Printf("Creating bucket with name: %s", bucket.name)
 		_, err = b.s3client.CreateBucket(bucket.name, bucket.region)
 		if err != nil {
-			//TODO: also delete already created buckets?
 			b.sgClient.DeleteGroup(grp.ID)
+
+			for _, delBucket := range createdBuckets {
+				b.s3client.DeleteBucket(delBucket)
+			}
 			return domain.ProvisionedServiceSpec{}, fmt.Errorf("Creating bucket failed with error: %s", err)
 		}
+		createdBuckets = append(createdBuckets, bucket)
 	}
 
 	spec := domain.ProvisionedServiceSpec{
@@ -154,14 +159,14 @@ func (b *broker) Deprovision(context context.Context, instanceID string, details
 		}
 	}
 
-	//2. get buckets names from group olicy
+	//2. get buckets names from group policy
 	bucketNames, err := getBucketsFromGroup(grp)
 	fmt.Println(bucketNames)
 	if err != nil {
 		return domain.DeprovisionServiceSpec{}, fmt.Errorf("Error getting buckets for group %s: %s", grp.DisplayName, err)
 	}
 
-	//3. Delete buckets concurrently
+	//3. Delete buckets concurrently. Sequentially is too slow for more than about 6 buckets.
 	var delWG sync.WaitGroup
 	eChan := make(chan error)
 
