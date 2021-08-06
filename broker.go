@@ -111,11 +111,12 @@ func (b *broker) Provision(context context.Context, instanceID string, details d
 		return domain.ProvisionedServiceSpec{}, fmt.Errorf("Group Creation Failed: %s", err)
 	}
 
-	//2. Create a buckets
+	//2. Create buckets
 	for _, bucket := range createBuckets {
 		log.Printf("Creating bucket with name: %s", bucket.name)
 		_, err = b.s3client.CreateBucket(bucket.name, bucket.region)
 		if err != nil {
+			//TODO: also delete already created buckets?
 			b.sgClient.DeleteGroup(grp.ID)
 			return domain.ProvisionedServiceSpec{}, fmt.Errorf("Creating bucket failed with error: %s", err)
 		}
@@ -142,7 +143,13 @@ func (b *broker) Deprovision(context context.Context, instanceID string, details
 	//1. Get Group
 	grp, err := b.sgClient.GetGroupByName(instance)
 	if err != nil {
-		return domain.DeprovisionServiceSpec{}, fmt.Errorf("Error getting group from storageGrid: %s", err)
+		if sge, ok := err.(apiError); ok {
+			if sge.statusCode != 502 {
+				return domain.DeprovisionServiceSpec{}, fmt.Errorf("Error getting group from storageGrid: %s", err)
+			}
+		} else {
+			return domain.DeprovisionServiceSpec{}, fmt.Errorf("Error getting group from storageGrid: %s", err)
+		}
 	}
 
 	//2. get buckets names from group olicy
