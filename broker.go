@@ -41,11 +41,13 @@ type Credentials struct {
 }
 
 type ProvisionParamsBucket struct {
-	Name   string //max 9 chars
+	Name   string `json:"name"`
 	Region string `json:"region"`
 }
 
-type ProvisionParameters []ProvisionParamsBucket
+type ProvisionParameters struct {
+	Buckets []ProvisionParamsBucket `json:"buckets"`
+}
 
 type Bucket struct {
 	name   string
@@ -68,7 +70,7 @@ func (b *broker) Provision(context context.Context, instanceID string, details d
 			return domain.ProvisionedServiceSpec{}, apiresponses.ErrRawParamsInvalid
 		}
 
-		for _, reqBucket := range params {
+		for _, reqBucket := range params.Buckets {
 			var friendlyPart string
 			if len(reqBucket.Name) > 27 {
 				friendlyPart = reqBucket.Name[0:27]
