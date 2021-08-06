@@ -4,8 +4,9 @@ curl http://broker:broker@localhost:3000/v2/service_instances/c41cab85-d688-4dc5
   "context": {
     "platform": "cloudfoundry"
   },
-  "parameters": [
-    { "name": "bucketone",
+  "parameters": {
+    "buckets": [
+    { "name": "bucket1",
     "region": "lab"
     },
     { "name": "bucket2",
@@ -13,7 +14,7 @@ curl http://broker:broker@localhost:3000/v2/service_instances/c41cab85-d688-4dc5
     },
     { "name": "bucket3"
     }
-  ],
+  ]},
   "organization_guid": "c0eda3a0-a224-4985-9e50-6c6b9a4a9115",
   "space_guid": "21284559-5dfb-4e72-98fc-16cc92b2012e"
 }' -X PUT -H "X-Broker-API-Version: 2.16" -H "Content-Type: application/json"

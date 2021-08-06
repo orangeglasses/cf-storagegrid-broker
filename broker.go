@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -141,7 +142,7 @@ func (b *broker) Deprovision(context context.Context, instanceID string, details
 	//1. Get Group
 	grp, err := b.sgClient.GetGroupByName(instance)
 	if err != nil {
-		return domain.DeprovisionServiceSpec{}, nil
+		return domain.DeprovisionServiceSpec{}, fmt.Errorf("Error getting group from storageGrid: %s", err)
 	}
 
 	//2. get buckets names from group olicy
@@ -151,19 +152,47 @@ func (b *broker) Deprovision(context context.Context, instanceID string, details
 		return domain.DeprovisionServiceSpec{}, fmt.Errorf("Error getting buckets for group %s: %s", grp.DisplayName, err)
 	}
 
-	//3. Delete buckets
+	//3. Delete buckets concurrently
+	var delWG sync.WaitGroup
+	eChan := make(chan error)
+
+	delWG.Add(len(bucketNames))
+
+	go func() {
+		delWG.Wait()
+		close(eChan)
+	}()
+
 	for _, bucketName := range bucketNames {
-		log.Printf("Deleting bucket %s\n", bucketName)
-		if _, err := b.s3client.DeleteBucket(bucketName); err != nil {
-			if awsErr, ok := err.(awserr.Error); ok {
-				if awsErr.Code() != s3.ErrCodeNoSuchBucket {
-					return domain.DeprovisionServiceSpec{}, err
+
+		go func(name string) {
+			defer delWG.Done()
+			log.Printf("Deleting bucket %s\n", name)
+			if _, err := b.s3client.DeleteBucket(name); err != nil {
+				if awsErr, ok := err.(awserr.Error); ok {
+					if awsErr.Code() != s3.ErrCodeNoSuchBucket {
+						eChan <- err
+					}
 				}
 			}
+		}(bucketName)
+	}
+
+	var errors []error
+	for err := range eChan {
+		errors = append(errors, err)
+	}
+
+	if len(errors) > 0 {
+		var errorString string
+		for _, e := range errors {
+			errorString = fmt.Sprintf("%s -- %s", errorString, e)
 		}
+		return domain.DeprovisionServiceSpec{}, fmt.Errorf("Errors while deleting service instance: %s", errorString)
 	}
 
 	//4. Delete group
+	log.Printf("Deleting group %s\n", grp.DisplayName)
 	if err := b.sgClient.DeleteGroup(grp.ID); err != nil {
 		return domain.DeprovisionServiceSpec{}, err
 	}
@@ -193,7 +222,7 @@ func (b *broker) Bind(context context.Context, instanceID, bindingID string, det
 	//3 Create storage grid user in group
 	userFullName := fmt.Sprintf("Binding to app GUID: %s", details.AppGUID)
 	if details.AppGUID == "" {
-		userFullName = fmt.Sprintf("Service Key in space GUID: %s", details.BindResource.SpaceGuid)
+		userFullName = fmt.Sprintf("Service Key")
 	}
 
 	user, err := b.sgClient.CreateUser(userName, userFullName, []string{group.ID})
