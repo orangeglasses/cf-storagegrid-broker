@@ -145,7 +145,7 @@ func (b *broker) Deprovision(context context.Context, instanceID string, details
 	if err != nil {
 		if sge, ok := err.(apiError); ok {
 			if sge.statusCode != 404 {
-				return domain.DeprovisionServiceSpec{}, fmt.Errorf("Error getting group from storageGrid: %s", err)
+				return domain.DeprovisionServiceSpec{}, brokerapi.ErrInstanceDoesNotExist
 			}
 		} else {
 			return domain.DeprovisionServiceSpec{}, fmt.Errorf("Error getting group from storageGrid: %s", err)
