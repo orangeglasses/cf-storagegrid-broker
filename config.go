@@ -15,6 +15,7 @@ type brokerConfig struct {
 	S3ForcePathStyle          bool   `envconfig:"s3_path_style" default:"true"`
 	LogLevel                  string `envconfig:"log_level" default:"INFO"`
 	Port                      string `envconfig:"port" default:"3000"`
+	DocsURL                   string `envconfig:"docsurl" default:""`
 }
 
 func brokerConfigLoad() (brokerConfig, error) {

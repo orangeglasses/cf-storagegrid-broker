@@ -33,6 +33,10 @@ func main() {
 		panic(err)
 	}
 
+	for i, _ := range services {
+		services[i].Metadata.DocumentationUrl = config.DocsURL
+	}
+
 	logger := lager.NewLogger("cf-storagegrid-broker")
 	logger.RegisterSink(lager.NewWriterSink(os.Stdout, logLevels[config.LogLevel]))
 
