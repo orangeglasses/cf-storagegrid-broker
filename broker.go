@@ -36,7 +36,7 @@ type Credentials struct {
 	InsecureSkipVerify bool         `json:"insecure_skip_verify"`
 	AccessKeyID        string       `json:"access_key_id"`
 	SecretAccessKey    string       `json:"secret_access_key"`
-	Buckets            []CredBucket `json:"bucket"`
+	Buckets            []CredBucket `json:"buckets"`
 	Endpoint           string       `json:"endpoint"`
 	PathStyleAccess    bool         `json:"pathStyleAccess"`
 }
