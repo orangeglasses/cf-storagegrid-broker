@@ -7,19 +7,21 @@ import (
 	"text/template"
 )
 
-//"urn:sgws:s3:::{{.BucketName}}"
-
-func GenerateS3Policy(instanceID string, buckets []Bucket) (string, error) {
+func GenerateS3Policy(instanceID string, buckets map[string]Bucket) (string, error) {
 	t := template.Must(template.ParseFiles("group_policy.json.tmpl"))
 
 	var (
-		BucketRsrcs  []string
-		ObjectsRsrcs []string
+		BucketRsrcs  []string = []string{}
+		ObjectsRsrcs []string = []string{}
 	)
 
 	for _, bucket := range buckets {
 		BucketRsrcs = append(BucketRsrcs, fmt.Sprintf("urn:sgws:s3:::%s", bucket.name))
 		ObjectsRsrcs = append(ObjectsRsrcs, fmt.Sprintf("urn:sgws:s3:::%s/*", bucket.name))
+	}
+
+	if len(BucketRsrcs) == 0 {
+		return "{}", nil
 	}
 
 	brBytes, err := json.Marshal(BucketRsrcs)

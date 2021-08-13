@@ -351,6 +351,27 @@ func (s *storageGridClient) CreateGroup(groupName, policy string) (sgGroup, erro
 	return grp, nil
 }
 
+func (s *storageGridClient) UpdateGroupPolicy(grp sgGroup, policy string) (sgGroup, error) {
+	grp.Policies = json.RawMessage(policy)
+
+	reqBody, err := json.Marshal(grp)
+	if err != nil {
+		return sgGroup{}, fmt.Errorf("Marshalling group object to json failed: %s", err)
+	}
+
+	result, err := s.DoApiRequest("PUT", fmt.Sprintf("org/groups/%s", grp.ID), reqBody, http.StatusOK)
+	if err != nil {
+		return sgGroup{}, err
+	}
+
+	err = json.Unmarshal(result.Data, &grp)
+	if err != nil {
+		return sgGroup{}, err
+	}
+
+	return grp, nil
+}
+
 func (s *storageGridClient) DeleteGroup(groupID string) error {
 	_, err := s.DoApiRequest("DELETE", fmt.Sprintf("org/groups/%s", groupID), nil, http.StatusNoContent)
 	if err != nil {

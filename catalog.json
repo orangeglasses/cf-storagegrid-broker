@@ -5,9 +5,8 @@
   "bindable": true,
   "bindings_retrievable": false,
   "instances_retrievable": false,
-  
   "tags": [ "s3", "bucket" ],
-  "plan_updateable": false,
+  "plan_updateable": true,
   "plans": [
     {
       "id": "a31fec23-a86b-4d3a-87d2-f44b620b9c04",

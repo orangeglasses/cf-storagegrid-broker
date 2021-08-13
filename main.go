@@ -33,7 +33,7 @@ func main() {
 		panic(err)
 	}
 
-	for i, _ := range services {
+	for i := range services {
 		services[i].Metadata.DocumentationUrl = config.DocsURL
 	}
 

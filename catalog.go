@@ -19,5 +19,7 @@ func CatalogLoad(catalogFilePath string) ([]brokerapi.Service, error) {
 	if err != nil {
 		return []brokerapi.Service{}, err
 	}
+
+	services[0].Metadata.DocumentationUrl = ""
 	return services, nil
 }

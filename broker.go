@@ -2,17 +2,12 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/google/uuid"
 	"github.com/pivotal-cf/brokerapi"
 	"github.com/pivotal-cf/brokerapi/domain"
 	"github.com/pivotal-cf/brokerapi/domain/apiresponses"
@@ -41,15 +36,6 @@ type Credentials struct {
 	PathStyleAccess    bool         `json:"pathStyleAccess"`
 }
 
-type ProvisionParamsBucket struct {
-	Name   string `json:"name"`
-	Region string `json:"region"`
-}
-
-type ProvisionParameters struct {
-	Buckets []ProvisionParamsBucket `json:"buckets"`
-}
-
 type Bucket struct {
 	name   string
 	region string
@@ -60,38 +46,26 @@ func (b *broker) Services(context context.Context) ([]brokerapi.Service, error) 
 }
 
 func (b *broker) Provision(context context.Context, instanceID string, details domain.ProvisionDetails, asyncAllowed bool) (domain.ProvisionedServiceSpec, error) {
-	var createBuckets []Bucket
+	createBuckets := make(map[string]Bucket)
+	var err error
 
 	groupName := strings.ReplaceAll(instanceID, "-", "")
 
 	if details.RawParameters != nil && len(details.RawParameters) > 0 {
-		var params ProvisionParameters
-		err := json.Unmarshal(details.RawParameters, &params)
+		createBuckets, err = b.getRequestedBucketsFromParams(details.RawParameters)
 		if err != nil {
-			return domain.ProvisionedServiceSpec{}, apiresponses.ErrRawParamsInvalid
+			return domain.ProvisionedServiceSpec{}, err
 		}
-
-		for _, reqBucket := range params.Buckets {
-			var friendlyPart string
-			if len(reqBucket.Name) > 27 {
-				friendlyPart = reqBucket.Name[0:27]
-			} else {
-				friendlyPart = reqBucket.Name
-			}
-
-			bucket := Bucket{
-				name:   fmt.Sprintf("%s-%s", friendlyPart, strings.ReplaceAll(uuid.New().String(), "-", "")),
-				region: reqBucket.Region,
-			}
-			createBuckets = append(createBuckets, bucket)
+		for key, bckt := range createBuckets {
+			bckt.name = generatNewFullName(key)
+			createBuckets[key] = bckt
 		}
-
 	} else {
 		bucket := Bucket{
-			name:   strings.ReplaceAll(uuid.New().String(), "-", ""),
+			name:   generatNewFullName(""),
 			region: b.s3client.Region,
 		}
-		createBuckets = append(createBuckets, bucket)
+		createBuckets[bucket.name] = bucket
 	}
 
 	policy, err := GenerateS3Policy(groupName, createBuckets)
@@ -160,48 +134,47 @@ func (b *broker) Deprovision(context context.Context, instanceID string, details
 	}
 
 	//2. get buckets names from group policy
-	bucketNames, err := getBucketsFromGroup(grp)
-	fmt.Println(bucketNames)
+	buckets, err := b.getBucketsFromGroup(grp)
 	if err != nil {
 		return domain.DeprovisionServiceSpec{}, fmt.Errorf("Error getting buckets for group %s: %s", grp.DisplayName, err)
 	}
 
-	//3. Delete buckets concurrently. Sequentially is too slow for more than about 6 buckets.
-	var delWG sync.WaitGroup
-	eChan := make(chan error)
+	//3. Delete buckets
+	deletedBuckets, errs := b.deleteBuckets(buckets)
 
-	delWG.Add(len(bucketNames))
-
-	go func() {
-		delWG.Wait()
-		close(eChan)
-	}()
-
-	for _, bucketName := range bucketNames {
-
-		go func(name string) {
-			defer delWG.Done()
-			log.Printf("Deleting bucket %s\n", name)
-			if _, err := b.s3client.DeleteBucket(name); err != nil {
-				if awsErr, ok := err.(awserr.Error); ok {
-					if awsErr.Code() != s3.ErrCodeNoSuchBucket {
-						eChan <- err
-					}
-				}
+	if len(errs) > 0 {
+		if len(deletedBuckets) > 0 {
+			// if there were any buckets deleted we need to update the policy
+			for friendlyName := range deletedBuckets {
+				delete(buckets, friendlyName)
 			}
-		}(bucketName)
-	}
 
-	var errors []error
-	for err := range eChan {
-		errors = append(errors, err)
-	}
+			if len(buckets) == 0 {
+				//If all buckets were deleted anyways despite the error we'll delete the group and exit successfully
+				log.Printf("Deleting group %s\n", grp.DisplayName)
+				if err := b.sgClient.DeleteGroup(grp.ID); err != nil {
+					return domain.DeprovisionServiceSpec{}, err
+				}
+				return domain.DeprovisionServiceSpec{}, nil
+			}
 
-	if len(errors) > 0 {
+			//if not all buckets were deleted we'll have to generate a new policy containing the remaining buckets
+			policy, err := GenerateS3Policy(instance, buckets)
+			if err != nil {
+				return domain.DeprovisionServiceSpec{}, err
+			}
+
+			_, err = b.sgClient.UpdateGroupPolicy(grp, policy)
+			if err != nil {
+				log.Printf("Error updating group policy: %s\n", err)
+			}
+		}
+
 		var errorString string
-		for _, e := range errors {
+		for _, e := range errs {
 			errorString = fmt.Sprintf("%s -- %s", errorString, e)
 		}
+
 		return domain.DeprovisionServiceSpec{}, fmt.Errorf("Errors while deleting service instance: %s", errorString)
 	}
 
@@ -227,11 +200,10 @@ func (b *broker) Bind(context context.Context, instanceID, bindingID string, det
 	}
 
 	//2 retrieve bucket names and create buckets array
-	bucketNames, err := getBucketsFromGroup(group)
+	buckets, err := b.getBucketsFromGroup(group)
 	if err != nil {
 		return domain.Binding{}, fmt.Errorf("Unable to retrieve buckets for instance %s", instance)
 	}
-	fmt.Println(bucketNames)
 
 	//3 Create storage grid user in group
 	userFullName := fmt.Sprintf("Binding to app GUID: %s", details.AppGUID)
@@ -256,21 +228,15 @@ func (b *broker) Bind(context context.Context, instanceID, bindingID string, det
 	creds, err := b.sgClient.CreateS3CredsForUser(user.ID)
 
 	//5. return bind info
-	var buckets []CredBucket
-	for _, name := range bucketNames {
-		r, err := b.s3client.GetBucketRegion(name)
-		if err != nil {
-			return domain.Binding{}, fmt.Errorf("Unable to determine region for bucket %s", name)
-		}
-
-		friendlyName := name[0 : len(name)-33]
-		b := CredBucket{
-			URI:    fmt.Sprintf("s3://%s:%s@%s/%s", url.QueryEscape(creds.AccessKey), url.QueryEscape(creds.SecretAccessKey), b.s3client.Endpoint, name),
+	credBuckets := []CredBucket{}
+	for friendlyName, bckt := range buckets {
+		cb := CredBucket{
+			URI:    fmt.Sprintf("s3://%s:%s@%s/%s", url.QueryEscape(creds.AccessKey), url.QueryEscape(creds.SecretAccessKey), b.s3client.Endpoint, bckt.name),
 			Name:   friendlyName,
-			Bucket: name,
-			Region: r,
+			Bucket: bckt.name,
+			Region: bckt.region,
 		}
-		buckets = append(buckets, b)
+		credBuckets = append(credBuckets, cb)
 	}
 
 	binding := domain.Binding{
@@ -278,7 +244,7 @@ func (b *broker) Bind(context context.Context, instanceID, bindingID string, det
 			InsecureSkipVerify: b.env.StorageGridSkipSSLCheck,
 			AccessKeyID:        creds.AccessKey,
 			SecretAccessKey:    creds.SecretAccessKey,
-			Buckets:            buckets,
+			Buckets:            credBuckets,
 			Endpoint:           b.s3client.Endpoint,
 			PathStyleAccess:    b.env.S3ForcePathStyle,
 		},
@@ -307,8 +273,92 @@ func (b *broker) Unbind(context context.Context, instanceID, bindingID string, d
 	return domain.UnbindSpec{}, err
 }
 
-func (b *broker) Update(context context.Context, instanceID string, details brokerapi.UpdateDetails, asyncAllowed bool) (domain.UpdateServiceSpec, error) {
-	return domain.UpdateServiceSpec{}, nil
+func (b *broker) Update(context context.Context, instanceID string, details domain.UpdateDetails, asyncAllowed bool) (domain.UpdateServiceSpec, error) {
+	// get current buckets
+	instance := strings.ReplaceAll(instanceID, "-", "")
+	group, err := b.sgClient.GetGroupByName(instance)
+	if err != nil {
+		return domain.UpdateServiceSpec{}, fmt.Errorf("Error retrieving group: %s", err)
+	}
+
+	currentBuckets, err := b.getBucketsFromGroup(group)
+	if err != nil {
+		return domain.UpdateServiceSpec{}, fmt.Errorf("Unable to retrieve buckets for instance %s", instance)
+	}
+
+	// get reqbuckets
+	requestedBuckets := make(map[string]Bucket)
+	if details.RawParameters != nil && len(details.RawParameters) > 0 {
+		requestedBuckets, err = b.getRequestedBucketsFromParams(details.RawParameters)
+	} else {
+		return domain.UpdateServiceSpec{}, apiresponses.ErrRawParamsInvalid
+	}
+
+	// figure out which ones to delete. range over current, if you can't find it in req then on delete list
+	deleteList := make(map[string]Bucket)
+	for key, bckt := range currentBuckets {
+		if _, ok := requestedBuckets[key]; !ok {
+			deleteList[key] = bckt
+		}
+	}
+
+	// figure out which ones to create. range over req, if you can't find it in current then on create list
+	createList := make(map[string]Bucket)
+	for friendlyName, bckt := range requestedBuckets {
+		if _, ok := currentBuckets[friendlyName]; !ok {
+			//if it's not in current bucket list we'll generate a new name and add it to the create list
+			bckt.name = generatNewFullName(friendlyName)
+			createList[friendlyName] = bckt
+		}
+	}
+
+	//delete buckets and remove deleted buckets from currentlist
+	deletedBuckets, delErr := b.deleteBuckets(deleteList)
+	for friendlyName := range deletedBuckets {
+		delete(currentBuckets, friendlyName)
+	}
+
+	//create buckets and add created buckets to current list
+	var createErr []error
+	for friendlyName, bucket := range createList {
+		log.Printf("Creating bucket with name: %s", bucket.name)
+		_, err = b.s3client.CreateBucket(bucket.name, bucket.region)
+		if err != nil {
+			createErr = append(createErr, err)
+		} else {
+			currentBuckets[friendlyName] = bucket
+		}
+	}
+
+	policy, err := GenerateS3Policy(instance, currentBuckets)
+	if err != nil {
+		return domain.UpdateServiceSpec{}, fmt.Errorf("Generating policy failed: %s", err)
+	}
+	_, err = b.s3client.SgClient.UpdateGroupPolicy(group, policy)
+	if err != nil {
+		return domain.UpdateServiceSpec{}, err
+	}
+
+	var errString string
+	if len(createErr) > 0 || len(delErr) > 0 {
+		for _, e := range createErr {
+			errString = fmt.Sprintf("%s-%s", errString, e.Error())
+		}
+
+		for _, e := range delErr {
+			errString = fmt.Sprintf("%s-%s", errString, e.Error())
+		}
+
+		return domain.UpdateServiceSpec{}, fmt.Errorf("Errors occured while updating service: %s", errString)
+
+	}
+
+	spec := domain.UpdateServiceSpec{
+		IsAsync:       false,
+		DashboardURL:  "",
+		OperationData: "",
+	}
+	return spec, nil
 }
 
 func (b *broker) LastOperation(context context.Context, instanceID string, details domain.PollDetails) (brokerapi.LastOperation, error) {
