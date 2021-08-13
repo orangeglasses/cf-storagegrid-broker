@@ -12,5 +12,9 @@ func getFriendlyNameFromBucketName(bucketName string) string {
 }
 
 func generatNewFullName(friendlyName string) string {
+	if friendlyName == "" {
+		friendlyName = "bucket"
+	}
+
 	return fmt.Sprintf("%s-%s", friendlyName, strings.ReplaceAll(uuid.New().String(), "-", ""))
 }
