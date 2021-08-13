@@ -12,6 +12,7 @@ applications:
     STORAGEGRID_ACCOUNT_ID: "accountidhere keep the quotes"
     S3_ENDPOINT: https://gateway node ip:8082
     S3_REGION:
+    DOCSURL: https://mydocurl/docs
  
   stack: cflinuxfs3
   routes:
