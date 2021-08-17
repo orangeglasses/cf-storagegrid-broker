@@ -4,7 +4,11 @@
       {
         "Sid": "DefaultBindAccessBuckets-{{.InstanceID}}",
         "Effect": "Allow",
-        "Action": [
+        "Action": [          
+          "s3:ListBucketVersions",
+          "s3:GetBucketVersioning",
+          "s3:PutBucketVersioning",
+          "s3:GetBucketLocation",
           "s3:ListAllMyBuckets",
           "s3:ListBucket"
         ],
