@@ -11,8 +11,9 @@ import (
 )
 
 type ProvisionParamsBucket struct {
-	Name   string `json:"name"`
-	Region string `json:"region"`
+	Name       string `json:"name"`
+	Region     string `json:"region"`
+	Versioning bool   `json:"versioning"`
 }
 
 type ProvisionParameters struct {
@@ -40,6 +41,8 @@ func (b *broker) getBucketsFromGroup(group sgGroup) (map[string]Bucket, error) {
 		var name string
 		fmt.Sscanf(res.(string), "urn:sgws:s3:::%s", &name)
 
+		fmt.Println(name)
+
 		region, err := b.s3client.GetBucketRegion(name)
 		if err != nil {
 			if awsErr, ok := err.(awserr.Error); ok {
@@ -53,9 +56,14 @@ func (b *broker) getBucketsFromGroup(group sgGroup) (map[string]Bucket, error) {
 			}
 		}
 
+		versioning, _ := b.s3client.GetBucketVersioning(name)
+		fmt.Println(name)
+		fmt.Println(versioning)
+
 		buckets[getFriendlyNameFromBucketName(name)] = Bucket{
-			name:   name,
-			region: region,
+			name:       name,
+			region:     region,
+			versioning: versioning,
 		}
 	}
 
@@ -85,8 +93,9 @@ func (b *broker) getRequestedBucketsFromParams(rawParams json.RawMessage) (map[s
 		}
 
 		bucket := Bucket{
-			name:   friendlyPart,
-			region: region,
+			name:       friendlyPart,
+			region:     region,
+			versioning: reqBucket.Versioning,
 		}
 		returnBuckets[bucket.name] = bucket
 	}

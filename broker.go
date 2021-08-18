@@ -21,10 +21,11 @@ type broker struct {
 }
 
 type CredBucket struct {
-	URI    string `json:"uri"`
-	Name   string `json:"name"`
-	Bucket string `json:"bucket"`
-	Region string `json:"region"`
+	URI        string `json:"uri"`
+	Name       string `json:"name"`
+	Bucket     string `json:"bucket"`
+	Region     string `json:"region"`
+	Versioning bool   `json:"versioning"`
 }
 
 type Credentials struct {
@@ -37,8 +38,9 @@ type Credentials struct {
 }
 
 type Bucket struct {
-	name   string
-	region string
+	name       string
+	region     string
+	versioning bool
 }
 
 func (b *broker) Services(context context.Context) ([]brokerapi.Service, error) {
@@ -98,6 +100,14 @@ func (b *broker) Provision(context context.Context, instanceID string, details d
 			}
 			return domain.ProvisionedServiceSpec{}, fmt.Errorf("Creating bucket failed with error: %s", err)
 		}
+
+		if bucket.versioning {
+			err = b.s3client.EnableBucketVersioning(bucket.name)
+			if err != nil {
+				log.Printf("Enabling versioning on %s failed: %s", bucket.name, err)
+			}
+		}
+
 		createdBuckets = append(createdBuckets, bucket.name)
 	}
 
@@ -231,10 +241,11 @@ func (b *broker) Bind(context context.Context, instanceID, bindingID string, det
 	credBuckets := []CredBucket{}
 	for friendlyName, bckt := range buckets {
 		cb := CredBucket{
-			URI:    fmt.Sprintf("s3://%s:%s@%s/%s", url.QueryEscape(creds.AccessKey), url.QueryEscape(creds.SecretAccessKey), b.s3client.Endpoint, bckt.name),
-			Name:   friendlyName,
-			Bucket: bckt.name,
-			Region: bckt.region,
+			URI:        fmt.Sprintf("s3://%s:%s@%s/%s", url.QueryEscape(creds.AccessKey), url.QueryEscape(creds.SecretAccessKey), b.s3client.Endpoint, bckt.name),
+			Name:       friendlyName,
+			Bucket:     bckt.name,
+			Region:     bckt.region,
+			Versioning: bckt.versioning,
 		}
 		credBuckets = append(credBuckets, cb)
 	}

@@ -12,7 +12,8 @@ curl http://broker:broker@localhost:3000/v2/service_instances/c41cab85-d688-4dc5
     { "name": "bucket2",
     "region": "us-east-1"
     },
-    { "name": "bucket3"
+    { "name": "bucket3",
+    "versioning": true
     }
   ]},
   "organization_guid": "c0eda3a0-a224-4985-9e50-6c6b9a4a9115",

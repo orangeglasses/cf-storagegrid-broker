@@ -27,12 +27,16 @@ Before you create the service you'll need to create a json file which looks simi
         },
         { 
             "name": "anotherbucket"
+            "versioning": true
         }
     ]
 }
   ```
 
-The bucket name is just the friendly name. The broker will add a unique ID to it before it creates the bucket. The region parameter is optional. If you don't use the region parameter the region specified in the "S3_REGION" environment variable will be used.
+- The bucket name is just the friendly name. The broker will add a unique ID to it before it creates the bucket. 
+- The region parameter is optional. If you don't use the region parameter the region specified in the "S3_REGION" environment variable will be used.
+- The versioning parameter is optional as well. The default is "false" which means versioning is disabled. If you need versioning enabled on your bucket set "versioning" to true.
+
 
 ## add/delete buckets to/from existing service
 It is possible to add or delete buckets to/from an existing service instance. Pleae note that deletion is only possible if the bucket is empty. If you originially deployed the buckets using the json as explained above you can simply update you json file to represent the state of the new state of the service. Meaning that if you delete buckets from the json they will also be deleted from the service. If you add buckets to the json they'll of course be created. 

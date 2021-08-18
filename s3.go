@@ -60,7 +60,7 @@ func (c *s3client) login() error {
 
 	httpClient := http.Client{
 		Transport: tr,
-		Timeout:   5 * time.Second,
+		Timeout:   15 * time.Second,
 	}
 
 	sess, err := session.NewSession(&aws.Config{
@@ -138,4 +138,32 @@ func (c *s3client) GetBucketRegion(bucketName string) (string, error) {
 	}
 
 	return *res.LocationConstraint, nil
+}
+
+func (c *s3client) GetBucketVersioning(bucketName string) (bool, error) {
+	res, err := c.Client.GetBucketVersioning(&s3.GetBucketVersioningInput{
+		Bucket: aws.String(bucketName),
+	})
+
+	if err != nil {
+		return false, err
+	}
+
+	if res.Status == nil {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func (c *s3client) EnableBucketVersioning(bucketName string) error {
+	_, err := c.Client.PutBucketVersioning(&s3.PutBucketVersioningInput{
+		Bucket: aws.String(bucketName),
+		VersioningConfiguration: &s3.VersioningConfiguration{
+			MFADelete: aws.String(s3.MFADeleteDisabled),
+			Status:    aws.String(s3.BucketVersioningStatusEnabled),
+		},
+	})
+
+	return err
 }

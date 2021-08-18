@@ -4,13 +4,11 @@
       {
         "Sid": "DefaultBindAccessBuckets-{{.InstanceID}}",
         "Effect": "Allow",
-        "Action": [          
-          "s3:ListBucketVersions",
-          "s3:GetBucketVersioning",
-          "s3:PutBucketVersioning",
-          "s3:GetBucketLocation",
-          "s3:ListAllMyBuckets",
-          "s3:ListBucket"
+        "NotAction": [          
+          "s3:CreateBucket",
+          "s3:DeleteBucket",
+          "s3:PutBucketPolicy",
+          "s3:DeleteBucketPolicy"
         ],
         "Resource": {{.BucketResources}}
       },
@@ -18,7 +16,9 @@
         "Sid": "DefaultBindAccessObjects-{{.InstanceID}}",
         "Effect": "Allow",
         "Action": [
-          "s3:*Object*"
+          "s3:*Object*",
+          "s3:ListMultipartUploadParts",
+          "s3:AbortMultipartUpload"
         ],
         "Resource": {{.ObjectResources}}        
       }
