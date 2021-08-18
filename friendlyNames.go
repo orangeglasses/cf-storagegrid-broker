@@ -8,6 +8,10 @@ import (
 )
 
 func getFriendlyNameFromBucketName(bucketName string) string {
+	if len(bucketName) == 32 {
+		return bucketName
+	}
+
 	return bucketName[0 : len(bucketName)-33]
 }
 
