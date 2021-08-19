@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/pivotal-cf/brokerapi"
 	"github.com/pivotal-cf/brokerapi/domain"
@@ -89,6 +90,8 @@ func (b *broker) Provision(context context.Context, instanceID string, details d
 
 	//2. Create buckets
 	var createdBuckets []string
+	var enableVersioningWG sync.WaitGroup
+
 	for _, bucket := range createBuckets {
 		log.Printf("Creating bucket with name: %s", bucket.name)
 		_, err = b.s3client.CreateBucket(bucket.name, bucket.region)
@@ -102,14 +105,25 @@ func (b *broker) Provision(context context.Context, instanceID string, details d
 		}
 
 		if bucket.versioning {
-			err = b.s3client.EnableBucketVersioning(bucket.name)
-			if err != nil {
-				log.Printf("Enabling versioning on %s failed: %s", bucket.name, err)
-			}
+			enableVersioningWG.Add(1)
+
+			go func(bckt Bucket) {
+				defer enableVersioningWG.Done()
+				err = b.s3client.EnableBucketVersioning(bckt.name)
+				if err != nil {
+					log.Printf("Enabling versioning on %s failed: %s", bckt.name, err)
+				} else {
+					log.Printf("Successfully enabled versioning for bucket: %s", bckt.name)
+				}
+			}(bucket)
 		}
 
 		createdBuckets = append(createdBuckets, bucket.name)
 	}
+
+	log.Println("Waiting for version enable goroutines to finish...")
+	enableVersioningWG.Wait()
+	log.Println("All done.")
 
 	spec := domain.ProvisionedServiceSpec{
 		IsAsync:       false,
@@ -305,11 +319,16 @@ func (b *broker) Update(context context.Context, instanceID string, details doma
 		return domain.UpdateServiceSpec{}, apiresponses.ErrRawParamsInvalid
 	}
 
-	// figure out which ones to delete. range over current, if you can't find it in req then on delete list
+	// figure out which ones to delete range over current, if you can't find it in req then on delete list. While we're at it let's also find out which buckets to change the versioning setting on
 	deleteList := make(map[string]Bucket)
+	enableVersioningList := make(map[string]Bucket)
 	for key, bckt := range currentBuckets {
 		if _, ok := requestedBuckets[key]; !ok {
 			deleteList[key] = bckt
+		} else {
+			if bckt.versioning == false && requestedBuckets[key].versioning == true { //can't simply check if changed because we cannot disable versioning
+				enableVersioningList[key] = bckt
+			}
 		}
 	}
 
@@ -338,9 +357,36 @@ func (b *broker) Update(context context.Context, instanceID string, details doma
 			createErr = append(createErr, err)
 		} else {
 			currentBuckets[friendlyName] = bucket
+
+			if bucket.versioning {
+				enableVersioningList[friendlyName] = bucket
+			}
 		}
 	}
 
+	//enable versioning on buckets from enableVerisoningList
+	var enableVerWG sync.WaitGroup
+	enableVerWG.Add(len(enableVersioningList))
+
+	for _, bucket := range enableVersioningList {
+		//we'll run enabling versioning in parallel because it seems to take some time (more than 5 seconds per buckets).
+		go func(bckt Bucket) {
+			defer enableVerWG.Done()
+
+			err := b.s3client.EnableBucketVersioning(bckt.name)
+			if err != nil {
+				log.Printf("Enabling versioning on %s failed: %s", bckt.name, err)
+			} else {
+				log.Printf("Successfully enabled versioning for bucket: %s", bckt.name)
+			}
+		}(bucket)
+	}
+
+	log.Println("Waiting for version enable goroutines to finish...")
+	enableVerWG.Wait()
+	log.Println("All done.")
+
+	//generate the policy to include changes
 	policy, err := GenerateS3Policy(instance, currentBuckets)
 	if err != nil {
 		return domain.UpdateServiceSpec{}, fmt.Errorf("Generating policy failed: %s", err)
@@ -350,6 +396,7 @@ func (b *broker) Update(context context.Context, instanceID string, details doma
 		return domain.UpdateServiceSpec{}, err
 	}
 
+	//check for accumulated errors
 	var errString string
 	if len(createErr) > 0 || len(delErr) > 0 {
 		for _, e := range createErr {
@@ -361,7 +408,6 @@ func (b *broker) Update(context context.Context, instanceID string, details doma
 		}
 
 		return domain.UpdateServiceSpec{}, fmt.Errorf("Errors occured while updating service: %s", errString)
-
 	}
 
 	spec := domain.UpdateServiceSpec{

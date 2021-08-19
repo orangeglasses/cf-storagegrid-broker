@@ -7,12 +7,15 @@ curl http://broker:broker@localhost:3000/v2/service_instances/c41cab85-d688-4dc5
   "parameters": {
     "buckets": [
     { "name": "bucket1",
-    "region": "lab"
+    "region": "lab",
+    "versioning": true
     },
     { "name": "bucket2",
-    "region": "us-east-1"
+    "region": "us-east-1",
+    "versioning": true
     },
-    { "name": "bucket4"
+    { "name": "bucket4",
+      "versioning": true
     }
   ]},
   "previous_values": {

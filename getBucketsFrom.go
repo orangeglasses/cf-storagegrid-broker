@@ -41,8 +41,6 @@ func (b *broker) getBucketsFromGroup(group sgGroup) (map[string]Bucket, error) {
 		var name string
 		fmt.Sscanf(res.(string), "urn:sgws:s3:::%s", &name)
 
-		fmt.Println(name)
-
 		region, err := b.s3client.GetBucketRegion(name)
 		if err != nil {
 			if awsErr, ok := err.(awserr.Error); ok {
@@ -57,8 +55,6 @@ func (b *broker) getBucketsFromGroup(group sgGroup) (map[string]Bucket, error) {
 		}
 
 		versioning, _ := b.s3client.GetBucketVersioning(name)
-		fmt.Println(name)
-		fmt.Println(versioning)
 
 		buckets[getFriendlyNameFromBucketName(name)] = Bucket{
 			name:       name,
