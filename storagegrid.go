@@ -174,15 +174,41 @@ func (s *storageGridClient) DoApiRequest(method, path string, body []byte, check
 		return apiResp, fmt.Errorf("Error creating request: %s", err)
 	}
 
-	if err := s.login(); err != nil {
-		return apiResp, fmt.Errorf("Error logging in: %s", err)
+	var loginError error
+	loginSuccess := false
+	for loginTries := 3; loginTries > 0; loginTries-- {
+		if err := s.login(); err != nil {
+			loginError = err
+			time.Sleep(3 * time.Second)
+		} else {
+			loginSuccess = true
+			break
+		}
+	}
+
+	if !loginSuccess {
+		return apiResp, fmt.Errorf("Error logging in: %s", loginError)
 	}
 
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", s.token))
 
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
+	var doErr error
+	doSuccess := false
+	var resp *http.Response
+	for doTries := 3; doTries > 0; doTries-- {
+		re, err := s.httpClient.Do(req)
+		if err != nil {
+			doErr = err
+			time.Sleep(3 * time.Second)
+		} else {
+			resp = re
+			doSuccess = true
+			break
+		}
+	}
+
+	if !doSuccess {
 		return apiResp, fmt.Errorf("Error doing http request: %s", err)
 	}
 

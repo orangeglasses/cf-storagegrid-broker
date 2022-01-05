@@ -290,6 +290,10 @@ func (b *broker) Unbind(context context.Context, instanceID, bindingID string, d
 	//1. delete user
 	user, err := b.sgClient.GetUserByName(userName)
 	if err != nil {
+		//if user was never created or already gone return succes
+		if strings.Contains(err.Error(), "404") {
+			return domain.UnbindSpec{}, nil
+		}
 		return domain.UnbindSpec{}, err
 	}
 
