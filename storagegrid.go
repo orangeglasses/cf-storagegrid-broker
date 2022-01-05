@@ -194,6 +194,7 @@ func (s *storageGridClient) DoApiRequest(method, path string, body []byte, check
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", s.token))
 
 	var doErr error
+	doErr = nil
 	doSuccess := false
 	var resp *http.Response
 	for doTries := 3; doTries > 0; doTries-- {
@@ -209,7 +210,7 @@ func (s *storageGridClient) DoApiRequest(method, path string, body []byte, check
 	}
 
 	if !doSuccess {
-		return apiResp, fmt.Errorf("Error doing http request: %s", err)
+		return apiResp, fmt.Errorf("Error doing http request: %s", doErr)
 	}
 
 	defer resp.Body.Close()
