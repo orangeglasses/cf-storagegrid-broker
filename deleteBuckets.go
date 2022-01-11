@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"sync"
 
@@ -68,7 +69,7 @@ func (b *broker) deleteBuckets(buckets map[string]Bucket) (map[string]Bucket, []
 	var errors []error
 	for status := range statusChan {
 		if status.err != nil {
-			errors = append(errors, status.err)
+			errors = append(errors, fmt.Errorf("Error deleting bucket %s: %s", status.name, status.err.Error()))
 		}
 
 		if status.deleted {
