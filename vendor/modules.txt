@@ -2,7 +2,7 @@
 ## explicit
 code.cloudfoundry.org/lager
 # github.com/aws/aws-sdk-go v1.39.2
-## explicit
+## explicit; go 1.11
 github.com/aws/aws-sdk-go/aws
 github.com/aws/aws-sdk-go/aws/arn
 github.com/aws/aws-sdk-go/aws/awserr
@@ -58,19 +58,18 @@ github.com/aws/aws-sdk-go/service/sts/stsiface
 ## explicit
 github.com/google/uuid
 # github.com/gorilla/mux v1.8.0
-## explicit
+## explicit; go 1.12
 github.com/gorilla/mux
 # github.com/jmespath/go-jmespath v0.4.0
+## explicit; go 1.14
 github.com/jmespath/go-jmespath
 # github.com/kelseyhightower/envconfig v1.4.0
 ## explicit
 github.com/kelseyhightower/envconfig
-# github.com/kr/pretty v0.1.0
-## explicit
-# github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e
-## explicit
+# github.com/onsi/ginkgo v1.16.4
+## explicit; go 1.15
 # github.com/onsi/gomega v1.14.0
-## explicit
+## explicit; go 1.14
 # github.com/pborman/uuid v1.2.1
 ## explicit
 github.com/pborman/uuid
@@ -84,6 +83,5 @@ github.com/pivotal-cf/brokerapi/handlers
 github.com/pivotal-cf/brokerapi/middlewares
 github.com/pivotal-cf/brokerapi/utils
 # github.com/pkg/errors v0.9.1
-github.com/pkg/errors
-# gopkg.in/check.v1 v1.0.0-20200902074654-038fdea0a05b
 ## explicit
+github.com/pkg/errors
