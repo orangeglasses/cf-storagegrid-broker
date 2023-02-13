@@ -57,7 +57,10 @@ func main() {
 		s3client: s3Client,
 	}
 
-	admin := adminAPI{}
+	admin := adminAPI{
+		s: sgClient,
+		b: serviceBroker,
+	}
 
 	brokerHandler := brokerapi.New(serviceBroker, logger, brokerCredentials)
 	fmt.Println("Starting service")
