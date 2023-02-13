@@ -58,8 +58,10 @@ func main() {
 	}
 
 	admin := adminAPI{
-		s: sgClient,
-		b: serviceBroker,
+		s:        sgClient,
+		b:        serviceBroker,
+		username: config.BrokerUsername,
+		password: config.BrokerPassword,
 	}
 
 	brokerHandler := brokerapi.New(serviceBroker, logger, brokerCredentials)
