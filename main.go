@@ -57,8 +57,11 @@ func main() {
 		s3client: s3Client,
 	}
 
+	admin := adminAPI{}
+
 	brokerHandler := brokerapi.New(serviceBroker, logger, brokerCredentials)
 	fmt.Println("Starting service")
+	http.HandleFunc("/admin/FindInstanceIDForBucket", admin.FindGroupForBucketHandler)
 	http.Handle("/", brokerHandler)
 	http.ListenAndServe(":"+config.Port, nil)
 }
