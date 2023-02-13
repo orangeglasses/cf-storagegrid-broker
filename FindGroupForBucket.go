@@ -29,9 +29,9 @@ func (a adminAPI) FindGroupForBucketHandler(w http.ResponseWriter, r *http.Reque
 }
 
 func (a adminAPI) FindGroupForBucket(bucketName, lastGroupURN string) (string, error) {
-	reqURL := "org/groups?limit=100"
+	reqURL := "org/groups?type=local&limit=100"
 	if lastGroupURN != "" {
-		reqURL = fmt.Sprintf("org/groups?limit=100&marker=%v&includeMarker=false", lastGroupURN)
+		reqURL = fmt.Sprintf("org/groups?type=local&limit=100&marker=%v&includeMarker=false", lastGroupURN)
 	}
 
 	log.Println("Doing API request: ", reqURL)
