@@ -5,7 +5,6 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 )
 
@@ -20,6 +19,7 @@ func (a adminAPI) FindGroupForBucketHandler(w http.ResponseWriter, r *http.Reque
 	username, password, ok := r.BasicAuth()
 	if !ok {
 		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprintf(w, "Please provide the broker username and password")
 		return
 	}
 
@@ -57,7 +57,6 @@ func (a adminAPI) FindGroupForBucket(bucketName, lastGroupURN string) (string, e
 		reqURL = fmt.Sprintf("org/groups?type=local&limit=100&marker=%v&includeMarker=false", lastGroupURN)
 	}
 
-	log.Println("Doing API request: ", reqURL)
 	groupsResp, err := a.s.DoApiRequest("GET", reqURL, nil, http.StatusOK)
 	if err != nil {
 		return "", err
