@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -8,11 +10,32 @@ import (
 )
 
 type adminAPI struct {
-	s *storageGridClient
-	b *broker
+	s        *storageGridClient
+	b        *broker
+	username string
+	password string
 }
 
 func (a adminAPI) FindGroupForBucketHandler(w http.ResponseWriter, r *http.Request) {
+	username, password, ok := r.BasicAuth()
+	if !ok {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	usernameHash := sha256.Sum256([]byte(username))
+	passwordHash := sha256.Sum256([]byte(password))
+	expectedUsernameHash := sha256.Sum256([]byte(a.username))
+	expectedPasswordHash := sha256.Sum256([]byte(a.password))
+
+	usernameMatch := (subtle.ConstantTimeCompare(usernameHash[:], expectedUsernameHash[:]) == 1)
+	passwordMatch := (subtle.ConstantTimeCompare(passwordHash[:], expectedPasswordHash[:]) == 1)
+
+	if !usernameMatch || !passwordMatch {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
 	bucketName := r.URL.Query().Get("bucket")
 	if bucketName == "" {
 		w.WriteHeader(http.StatusBadRequest)
