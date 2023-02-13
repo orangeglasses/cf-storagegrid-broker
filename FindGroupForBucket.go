@@ -13,6 +13,11 @@ type adminAPI struct {
 
 func (a adminAPI) FindGroupForBucketHandler(w http.ResponseWriter, r *http.Request) {
 	bucketName := r.URL.Query().Get("bucket")
+	if bucketName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	grpName, err := a.FindGroupForBucket(bucketName, "")
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
@@ -23,7 +28,12 @@ func (a adminAPI) FindGroupForBucketHandler(w http.ResponseWriter, r *http.Reque
 }
 
 func (a adminAPI) FindGroupForBucket(bucketName, lastGroupURN string) (string, error) {
-	groupsResp, err := a.s.DoApiRequest("GET", fmt.Sprintf("org/groups?page?limit=100&marker=%v&includeMarker=false", lastGroupURN), nil, http.StatusOK)
+	reqURL := "org/groups?page?limit=100"
+	if lastGroupURN != "" {
+		reqURL = fmt.Sprintf("org/groups?page?limit=100&marker=%v&includeMarker=false", lastGroupURN)
+	}
+
+	groupsResp, err := a.s.DoApiRequest("GET", reqURL, nil, http.StatusOK)
 	if err != nil {
 		return "", err
 	}

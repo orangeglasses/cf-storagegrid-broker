@@ -61,7 +61,7 @@ func main() {
 
 	brokerHandler := brokerapi.New(serviceBroker, logger, brokerCredentials)
 	fmt.Println("Starting service")
-	http.HandleFunc("/admin/FindInstanceIDForBucket", admin.FindGroupForBucketHandler)
+	http.HandleFunc("/admin/find", admin.FindGroupForBucketHandler)
 	http.Handle("/", brokerHandler)
 	http.ListenAndServe(":"+config.Port, nil)
 }
