@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 )
 
@@ -33,6 +34,7 @@ func (a adminAPI) FindGroupForBucket(bucketName, lastGroupURN string) (string, e
 		reqURL = fmt.Sprintf("org/groups?page?limit=100&marker=%v&includeMarker=false", lastGroupURN)
 	}
 
+	log.Println("Doing API request: ", reqURL)
 	groupsResp, err := a.s.DoApiRequest("GET", reqURL, nil, http.StatusOK)
 	if err != nil {
 		return "", err
